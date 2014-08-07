@@ -10,6 +10,13 @@ end
 VO = Struct.new :prob, :element
 RangeEl = Struct.new :range, :element
 
+def create_range_el(last_ele, new_end_range, new_element)
+	last_range = last_ele.range
+	new_start_range = last_range.last + 1
+	new_range = (new_start_range..new_end_range)
+	RangeEl.new(new_range, new_element)
+end
+
 def distribute_range(*probs)
 	sum = probs.inject(&:+)
 	raise ProbabilityOverflow if (sum > 100)
@@ -23,35 +30,14 @@ def distribute_range(*probs)
 	start_element = [ RangeEl.new((0..mapped[0].prob), mapped[0].element) ]
 
 	resp = mapped[1..-2].inject(start_element) do |memo, vo|
-		last_ele = memo.last
-		last_range = last_ele.range
 
-		new_start_range = last_range.last + 1
-		new_end_range = vo.prob
-
-    new_element = vo.element
-		new_range = (new_start_range..new_end_range)
-		memo << RangeEl.new(new_range, new_element)
+		memo << create_range_el(memo.last, vo.prob, vo.element)
 
 		memo
 
 	end
 
-	last_ele = resp.last
-	vo = mapped.last
-
-	last_range = last_ele.range
-	new_start_range = last_range.last + 1
-	new_end_range = 100
-
-	new_element = vo.element
-	new_range = (new_start_range..new_end_range)
-	resp << RangeEl.new(new_range, new_element)
-
-
-
-	#adicionar o ultimo
-	#ret = .....!!!
+	resp << create_range_el(resp.last, 100, mapped.last.element)
 
 	resp.inject({}) do |memo, ele|
 		memo[ele.range] = ele.element

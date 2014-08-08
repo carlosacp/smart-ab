@@ -13,7 +13,7 @@ describe SmartAb do
     }.each do |k,v|
       it "percentages #{v['percentages']} and random = #{v['random']} should return #{v['expected']}" do
         expect(subject::Random).to receive(:generate).and_return(v['random'])
-        expect(@ab.distribute(v['percentages'])).to eq v['expected']
+        expect(@ab.distribute("sample-test",v['percentages'])).to eq v['expected']
       end
     end
   end
@@ -22,10 +22,10 @@ describe SmartAb do
     it "should return always the same index after the first distribute (session store)" do
       session = {}
       ab = subject::Engine.new(session)
-      result1 = ab.distribute([10,10,10,10,10,10,10,10,10,10])
-      result2 = ab.distribute([10,10,10,10,10,10,10,10,10,10])
-      result3 = ab.distribute([10,10,10,10,10,10,10,10,10,10])
-      result4 = ab.distribute([10,10,10,10,10,10,10,10,10,10])
+      result1 = ab.distribute("sample-test",[10,10,10,10,10,10,10,10,10,10])
+      result2 = ab.distribute("sample-test",[10,10,10,10,10,10,10,10,10,10])
+      result3 = ab.distribute("sample-test",[10,10,10,10,10,10,10,10,10,10])
+      result4 = ab.distribute("sample-test",[10,10,10,10,10,10,10,10,10,10])
 
       expect(result1).to eq result2
       expect(result2).to eq result3
@@ -35,8 +35,22 @@ describe SmartAb do
     it "should return the same Index if session is already set" do
       session = { :participating => 3 }
       ab = subject::Engine.new(session)
-      result1 = ab.distribute([10,10,10,10,10,10,10,10,10,10])
-      expect(result1).to eq session[:participating]
+      result1 = ab.distribute("sample-test",[10,10,10,10,10,10,10,10,10,10])
+      expect(result1).to eq session["smartab_sample-test"]
+    end
+
+    it "should allow multiple persistence for simultaneous experiments" do
+      session = {}
+      ab = subject::Engine.new(session)
+      expect(ab.session).to eq({})
+
+      expect(subject::Random).to receive(:generate).and_return(99)
+      result1 = ab.distribute("experiment-1", [10,10,10,10,10,10,10,10,10,10])
+      expect(ab.session).to eq({'smartab_experiment-1' => 9})
+
+      expect(subject::Random).to receive(:generate).and_return(1)
+      result2 = ab.distribute("experiment-2", [10,10,10,10,10,10,10,10,10,10])
+      expect(ab.session).to eq({'smartab_experiment-1' => 9,'smartab_experiment-2' => 0})
     end
   end
 

@@ -18,15 +18,15 @@ module SmartAb
       end
     end
 
-    def distribute(prob)
-      return session[:participating] unless session[:participating].nil?
+    def distribute(ab_name, prob)
+      return session["smartab_#{ab_name}"] unless session["smartab_#{ab_name}"].nil?
 
       random = Random.generate
       selected_range = distribute_range(*prob).select { |k, v|
         k === random
       }
 
-      session[:participating] = selected_range.values.first
+      session["smartab_#{ab_name}"] = selected_range.values.first
       selected_range.values.first
     end
   end

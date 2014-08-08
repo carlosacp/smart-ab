@@ -14,34 +14,49 @@ module SmartAb
 		end
 	end
 
-	class Engine
-		def self.map_probabilities(probs)
-			probs.map.with_index { |prob, index| VO.new prob, index }
+	class ProbabilityCollection
+		attr_accessor :probabilities, :mapped_probabilities
+
+		def initialize(probabilities)
+			self.probabilities = probabilities
+			self.mapped_probabilities = self.map
+			self.sort
 		end
 
-		def self.sort_probabilities(mapped_probs)
-			mapped_probs.sort! {|a,b| a.prob <=> b.prob }
+		def map
+			probabilities.map.with_index { |probability, index| VO.new probability, index }
 		end
 
-		def self.build_probabilities(mapped_probs)
-			first_element = [ RangeEl.new((0..mapped_probs[0].prob), mapped_probs[0].element) ]
-			resp = mapped_probs[1..-2].inject(first_element) do |memo, vo|
-				memo << create_range_el(memo.last, vo.prob, vo.element)
+		def sort
+			mapped_probabilities.sort! {|a,b| a.prob <=> b.prob }
+		end
+
+		def build
+			first_element = [ RangeEl.new((0..mapped_probabilities[0].prob), mapped_probabilities[0].element) ]
+			resp = mapped_probabilities[1..-2].inject(first_element) do |memo, vo|
+				memo << build_range_el(memo.last, vo.prob, vo.element)
 				memo
 			end
-			last_element = create_range_el(resp.last, 100, mapped_probs.last.element)
+			last_element = build_range_el(resp.last, 100, mapped_probabilities.last.element)
 			resp << last_element
 		end
 
+		def build_range_el(last_ele, new_end_range, new_element)
+			last_range = last_ele.range
+			new_start_range = last_range.last + 1
+			new_range = (new_start_range..new_end_range)
+			RangeEl.new(new_range, new_element)
+		end
+	end
+
+	class Engine
 		def self.distribute_range(*probs)
 			sum = probs.inject(&:+)
 			raise ProbabilityOverflow if (sum > 100)
 			raise ProbabilityUnderflow if (sum < 100)
 
-			mapped = map_probabilities(probs)
-			sort_probabilities(mapped)
-
-			build_probabilities(mapped).inject({}) do |memo, ele|
+			probc = ProbabilityCollection.new(probs)
+			probc.build.inject({}) do |memo, ele|
 				memo[ele.range] = ele.element
 				memo
 			end
@@ -56,13 +71,6 @@ module SmartAb
 			}
 
 			selected_range.values.first
-		end
-
-		def self.create_range_el(last_ele, new_end_range, new_element)
-			last_range = last_ele.range
-			new_start_range = last_range.last + 1
-			new_range = (new_start_range..new_end_range)
-			RangeEl.new(new_range, new_element)
 		end
 	end
 end

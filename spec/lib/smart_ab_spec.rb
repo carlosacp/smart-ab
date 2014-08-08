@@ -6,7 +6,22 @@ module SmartAb
 	ProbabilityOverflow = Class.new(StandardError)
 	ProbabilityUnderflow = Class.new(StandardError)
 	VO = Struct.new :prob, :element
+	RangeAxiom = Struct.new :percentual, :index
 	RangeEl = Struct.new :range, :element
+
+	class ProbabilityRange
+		attr_accessor :range_start, :range_end, :index, :range
+
+		def initialize(range_start, range_end, index)
+			self.range_start = range_start
+			self.range_end = range_end
+			self.index = index
+		end
+
+		def range
+			(self.range_start..self.range_end)
+		end
+	end
 
 	class Random
 		def self.generate
@@ -24,28 +39,28 @@ module SmartAb
 		end
 
 		def map
-			probabilities.map.with_index { |probability, index| VO.new probability, index }
+			probabilities.map.with_index { |percentual, index| RangeAxiom.new percentual, index }
 		end
 
 		def sort
-			mapped_probabilities.sort! {|a,b| a.prob <=> b.prob }
+			mapped_probabilities.sort! {|range_axiom1,range_axiom2| range_axiom1.percentual <=> range_axiom2.percentual }
 		end
 
 		def build
-			first_element = [ RangeEl.new((0..mapped_probabilities[0].prob), mapped_probabilities[0].element) ]
-			resp = mapped_probabilities[1..-2].inject(first_element) do |memo, vo|
-				memo << build_range_el(memo.last, vo.prob, vo.element)
+			first_element = [ ProbabilityRange.new(0, mapped_probabilities[0].percentual, mapped_probabilities[0].index) ]
+			resp = mapped_probabilities[1..-2].inject(first_element) do |memo, range_axiom|
+				memo << build_range_el(memo.last, range_axiom.percentual, range_axiom.index)
 				memo
 			end
-			last_element = build_range_el(resp.last, 100, mapped_probabilities.last.element)
+			last_element = build_range_el(resp.last, 100, mapped_probabilities.last.index)
 			resp << last_element
 		end
 
-		def build_range_el(last_ele, new_end_range, new_element)
+		def build_range_el(last_ele, end_range, index)
 			last_range = last_ele.range
-			new_start_range = last_range.last + 1
-			new_range = (new_start_range..new_end_range)
-			RangeEl.new(new_range, new_element)
+			start_range = last_range.last + 1
+			new_range = (start_range..end_range)
+			ProbabilityRange.new(start_range, end_range, index)
 		end
 	end
 
@@ -56,8 +71,8 @@ module SmartAb
 			raise ProbabilityUnderflow if (sum < 100)
 
 			probc = ProbabilityCollection.new(probs)
-			probc.build.inject({}) do |memo, ele|
-				memo[ele.range] = ele.element
+			probc.build.inject({}) do |memo, probability_range|
+				memo[probability_range.range] = probability_range.index
 				memo
 			end
 		end

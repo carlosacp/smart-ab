@@ -5,9 +5,7 @@ module SmartAb
 
 	ProbabilityOverflow = Class.new(StandardError)
 	ProbabilityUnderflow = Class.new(StandardError)
-	VO = Struct.new :prob, :element
 	RangeAxiom = Struct.new :percentual, :index
-	RangeEl = Struct.new :range, :element
 
 	class ProbabilityRange
 		attr_accessor :range_start, :range_end, :index, :range
@@ -29,7 +27,7 @@ module SmartAb
 		end
 	end
 
-	class ProbabilityCollection
+	class ProbabilityBuilder
 		attr_accessor :probabilities, :mapped_probabilities
 
 		def initialize(probabilities)
@@ -47,17 +45,23 @@ module SmartAb
 		end
 
 		def build
-			first_element = [ ProbabilityRange.new(0, mapped_probabilities[0].percentual, mapped_probabilities[0].index) ]
-			resp = mapped_probabilities[1..-2].inject(first_element) do |memo, range_axiom|
-				memo << build_range_el(memo.last, range_axiom.percentual, range_axiom.index)
-				memo
+			resp = mapped_probabilities[1..-2].inject(first_probability_range) do |probability_range_array, range_axiom|
+				probability_range_array << build_probability_range(probability_range_array.last, range_axiom.percentual, range_axiom.index)
+				probability_range_array
 			end
-			last_element = build_range_el(resp.last, 100, mapped_probabilities.last.index)
-			resp << last_element
+			resp << last_probability_range(resp.last)
 		end
 
-		def build_range_el(last_ele, end_range, index)
-			last_range = last_ele.range
+		def first_probability_range
+			[ ProbabilityRange.new(0, mapped_probabilities[0].percentual, mapped_probabilities[0].index) ]
+		end
+
+		def last_probability_range(probability_range)
+			build_probability_range(probability_range, 100, mapped_probabilities.last.index)
+		end
+
+		def build_probability_range(probability_range, end_range, index)
+			last_range = probability_range.range
 			start_range = last_range.last + 1
 			new_range = (start_range..end_range)
 			ProbabilityRange.new(start_range, end_range, index)
@@ -70,7 +74,7 @@ module SmartAb
 			raise ProbabilityOverflow if (sum > 100)
 			raise ProbabilityUnderflow if (sum < 100)
 
-			probc = ProbabilityCollection.new(probs)
+			probc = ProbabilityBuilder.new(probs)
 			probc.build.inject({}) do |memo, probability_range|
 				memo[probability_range.range] = probability_range.index
 				memo

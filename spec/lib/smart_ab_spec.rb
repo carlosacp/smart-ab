@@ -2,7 +2,6 @@ require 'spec_helper'
 
 
 module SmartAb
-
   ProbabilityOverflow = Class.new(StandardError)
   ProbabilityUnderflow = Class.new(StandardError)
   RangeAxiom = Struct.new :percentual, :index
@@ -55,7 +54,6 @@ module SmartAb
     def build_array
       cumulative_percentage = 0
       resp = mapped_probabilities[1..-2].inject(first_probability_range) do |prob_ranges, axiom|
-        puts "P = #{prob_ranges.last.percentual}"
         prob_ranges << probability_range(prob_ranges.last.after_end_range, prob_ranges.last.end_range+axiom.percentual, axiom.index)
         cumulative_percentage += prob_ranges.last.percentual
         prob_ranges
@@ -96,44 +94,42 @@ module SmartAb
     end
 
     def distribute(prob)
+      return session[:participating] unless session[:participating].nil?
+
       random = Random.generate
       selected_range = distribute_range(*prob).select { |k, v|
         k === random
       }
 
+      session[:participating] = selected_range.values.first
       selected_range.values.first
     end
   end
 end
 
 
-describe "Qqq" do
+describe SmartAb do
+  before(:each) {
+    @ab = subject::Engine.new({})
+  }
 
-  it "should pass" do
-    expect(SmartAb::Random).to receive(:generate).and_return(10);
-    a = (SmartAb::Engine.new([])).distribute([0, 30, 70])
-    expect(a).to be 1
+  context "should distribute percentages correctly" do
+    {
+      1 => { "random" => 10, "percentages" => [0,30,70], "expected" => 1 },
+      2 => { "random" => 80, "percentages" => [0,30,70], "expected" => 2 },
+      3 => { "random" => 10, "percentages" => [70,30], "expected" => 1 },
+    }.each do |k,v|
+      it "percentages #{v['percentages']} and random = #{v['random']} should return #{v['expected']}" do
+        expect(subject::Random).to receive(:generate).and_return(v['random'])
+        expect(@ab.distribute(v['percentages'])).to eq v['expected']
+      end
+    end
   end
 
-  it "should pass" do
-    expect(SmartAb::Random).to receive(:generate).and_return(80)
-    a = (SmartAb::Engine.new([])).distribute([0, 30, 70])
-    expect(a).to be 2
-  end
-
-  xit "should pass" do
-    a = (SmartAb::Engine.new([])).distribute([70,30], [:a, :b])
-    expect(a).to be :a
-  end
-
-end
-
-describe "session persistence" do
-  context "for 3 args" do
-
-    it {
-      session = []
-      ab = SmartAb::Engine.new(session)
+  context "session persistence" do
+    it "should return always the same index after the first distribute (session store)" do
+      session = {}
+      ab = subject::Engine.new(session)
       result1 = ab.distribute([10,10,10,10,10,10,10,10,10,10])
       result2 = ab.distribute([10,10,10,10,10,10,10,10,10,10])
       result3 = ab.distribute([10,10,10,10,10,10,10,10,10,10])
@@ -142,90 +138,43 @@ describe "session persistence" do
       expect(result1).to eq result2
       expect(result2).to eq result3
       expect(result3).to eq result4
-    }
-  end
-end
-
-describe "distribute_range" do
-  context "for 3 args" do
-    it "kkq" do
-      a = (SmartAb::Engine.new([])).distribute_range(0, 30, 70)
-      expect(a).to eq({
-          (0..0) => 0,
-          (1..30) => 1,
-          (31..100) => 2
-      })
     end
 
-    it {
-      a = SmartAb::Engine.new([])
-      expect(a.distribute_range(25,25,25,25)).to eq({
-          (0..25) => 0,
-          (26..50) => 1,
-          (51..75) => 2,
-          (76..100) => 3
-      })
-    }
-
-    it "test" do
-      ab = SmartAb::Engine.new([])
-      result4 = ab.distribute_range(10,10,10,10,10,10,10,10,10,10)
-      expect(result4).to eq ({
-        (0..10) => 0,
-        (11..20) => 1,
-        (21..30) => 2,
-        (31..40) => 3,
-        (41..50) => 4,
-        (51..60) => 5,
-        (61..70) => 6,
-        (71..80) => 7,
-        (81..90) => 8,
-        (91..100) => 9
-      })
-    end
-
-    it "kkq" do
-      a = (SmartAb::Engine.new([])).distribute_range(60, 10, 30)
-      expect(a).to eq({
-          (0..10) => 1,
-          (11..40) => 2,
-          (41..100) => 0
-      })
+    it "should return the same Index if session is already set" do
+      session = { :participating => 3 }
+      ab = subject::Engine.new(session)
+      result1 = ab.distribute([10,10,10,10,10,10,10,10,10,10])
+      expect(result1).to eq session[:participating]
     end
   end
 
-  context "for 2 args" do
-    it "kkq" do
-      a = (SmartAb::Engine.new([])).distribute_range(0, 100)
-      expect(a).to eq({
-          (0..0) => 0,
-          (1..100) => 1
-      })
+  context "raise exception for (over|under)flow cases" do
+    {
+      "ProbabilityOverflow" => [100,100],
+      "ProbabilityUnderflow" => [30,30]
+    }.each do |k,v|
+      it "should raise #{k} exception for percentage sets like #{v}" do
+        expect { @ab.distribute_range(*v).to raise_error(subject.send(k.to_sym))  }
+      end
     end
+  end
 
-    it "kkq" do
-      a = (SmartAb::Engine.new([])).distribute_range(30, 70)
-      expect(a).to eq({
-          (0..30) => 0,
-          (31..100) => 1
-      })
+  context "testing several variations of percentage axioms" do
+    intervals = {
+      [0,100] => {(0..0) => 0, (1..100) => 1},
+      [30,70] => {(0..30) => 0, (31..100) => 1},
+      [70,30] => {(0..30) => 1, (31..100) => 0},
+      [0,30,70] => {(0..0) => 0, (1..30) => 1, (31..100) => 2},
+      [60,10,30] => {(0..10) => 1, (11..40) => 2,(41..100) => 0},
+      [25,25,25,25] => {(0..25) => 0, (26..50) => 1, (51..75) => 2, (76..100) => 3},
+      [10,10,10,10,10,10,10,10,10,10] => {(0..10) => 0,(11..20) => 1,(21..30) => 2,(31..40) => 3,(41..50) => 4,(51..60) => 5,(61..70) => 6,(71..80) => 7, (81..90) => 8,(91..100) => 9}
+    }
+
+    intervals.each do |k, v|
+      it "testing percentages: #{k.join(',')}" do
+        result = @ab.distribute_range(*k)
+        expect(result).to eq v
+      end
     end
-
-    it "kkq" do
-      a = (SmartAb::Engine.new([])).distribute_range(70, 30)
-      expect(a).to eq({
-          (0..30) => 1,
-          (31..100) => 0
-      })
-    end
-
-    it "kkq" do
-      expect{ (SmartAb::Engine.new([])).distribute_range(100, 100) }.to raise_error(SmartAb::ProbabilityOverflow)
-    end
-
-    it "kkq" do
-      expect{ (SmartAb::Engine.new([])).distribute_range(30, 30) }.to raise_error(SmartAb::ProbabilityUnderflow)
-    end
-
   end
 end
